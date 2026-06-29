@@ -46,8 +46,8 @@
   td.me{cursor:pointer}
   td.me:active{outline:2px solid var(--brand)}
   .col-me{background:#eff6ff!important}
-  .off{background:#ff2b2b;color:#fff;font-weight:600}
-  .pharm{background:#ff33cc;color:#fff;font-weight:600}
+  .off{background:#ff0000;color:#fff;font-weight:600}
+  .pharm{background:#ff00ff;color:#fff;font-weight:600}
   .minecol{box-shadow:inset 3px 0 0 #2563eb}
   thead th.me-h{box-shadow:inset 0 -4px 0 #1d4ed8}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn);margin-left:3px;vertical-align:middle}
@@ -118,8 +118,8 @@
       </div>
       <div class="legend">
         <span>★ = คอลัมน์ของฉัน</span>
-        <span><i style="background:#ff2b2b"></i>หยุด</span>
-        <span><i style="background:#ff33cc"></i>เภสัชพาร์ท</span>
+        <span><i style="background:#ff0000"></i>หยุด</span>
+        <span><i style="background:#ff00ff"></i>เภสัชพาร์ท</span>
         <span><span class="dot"></span>มีคำขอรออนุมัติ</span>
       </div>
       <p class="muted" id="staffHint">แตะที่ช่องของคุณ (คอลัมน์ฟ้า) เพื่อขอเปลี่ยนเวลา</p>
@@ -278,11 +278,11 @@ function tableEl(){return S.user.role==='admin'?$('schedTable2'):$('schedTable')
 
 // สีหัวตารางตามสาขา (ให้เหมือนไฟล์ Google Sheet)
 var headerColor={
-  'สาขา 1':'#92d050',   // เขียว
-  'สาขา 2':'#9dc3e6',   // ฟ้า
-  'สาขา 3':'#f4a98f',   // ส้มแซลมอน
-  'สาขา 4':'#ffd966',   // เหลือง
-  'บางขุนศรี':'#7fd1c1'  // เขียวน้ำทะเล
+  'สาขา 1':'#00ff00',   // เขียวสด (ตามชีต ก.ค.)
+  'สาขา 2':'#a4c2f4',   // ฟ้า
+  'สาขา 3':'#ea9999',   // ส้มแซลมอน
+  'สาขา 4':'#ffff00',   // เหลือง
+  'บางขุนศรี':'#6aa84f'  // เขียวเข้ม
 };
 
 function loadSchedule(){
