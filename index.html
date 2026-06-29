@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>ตารางงานร้านยา</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#fff; --line:#e3e8f0; --ink:#1f2937; --muted:#6b7280;
+    --brand:#2563eb; --brand-d:#1d4ed8; --ok:#16a34a; --warn:#f59e0b; --bad:#dc2626;
+    --green:#dcfce7; --yellow:#fef9c3; --orange:#ffedd5; --gray:#eef1f5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
+       background:var(--bg);color:var(--ink);-webkit-text-size-adjust:100%}
+  header{position:sticky;top:0;z-index:30;background:var(--brand);color:#fff;
+         padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  header h1{font-size:16px;margin:0;flex:1;font-weight:700}
+  header .who{font-size:12px;opacity:.9}
+  .btn{border:0;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:600;
+       background:var(--brand);color:#fff;cursor:pointer}
+  .btn:active{transform:translateY(1px)}
+  .btn.sec{background:#eef2ff;color:var(--brand-d)}
+  .btn.ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);padding:6px 10px;font-size:13px}
+  .btn.ok{background:var(--ok)} .btn.bad{background:var(--bad)}
+  .btn.sm{padding:7px 12px;font-size:13px}
+  .wrap{max-width:760px;margin:0 auto;padding:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;
+        box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  select,input,textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;
+        font-size:16px;background:#fff;color:var(--ink)}
+  textarea{min-height:64px;resize:vertical}
+  .row{display:flex;gap:10px} .row>*{flex:1}
+  .muted{color:var(--muted);font-size:13px}
+  .hidden{display:none!important}
+  .err{background:#fef2f2;color:var(--bad);border:1px solid #fecaca;padding:10px;border-radius:10px;font-size:14px;margin-top:10px}
+  .ok-msg{background:#f0fdf4;color:var(--ok);border:1px solid #bbf7d0;padding:10px;border-radius:10px;font-size:14px;margin-top:10px}
+  /* schedule table */
+  .scroll{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:#fff}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border:1px solid var(--line);padding:6px 5px;text-align:center;white-space:nowrap}
+  thead th{position:sticky;top:0;background:#f1f5f9;z-index:5;font-weight:700}
+  tbody th{position:sticky;left:0;background:#f8fafc;z-index:4;font-weight:600;min-width:46px}
+  td.cell{cursor:default;min-width:78px}
+  td.me{cursor:pointer}
+  td.me:active{outline:2px solid var(--brand)}
+  .col-me{background:#eff6ff!important}
+  .off{background:#ff2b2b;color:#fff;font-weight:600}
+  .pharm{background:#ff33cc;color:#fff;font-weight:600}
+  .minecol{box-shadow:inset 3px 0 0 #2563eb}
+  thead th.me-h{box-shadow:inset 0 -4px 0 #1d4ed8}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn);margin-left:3px;vertical-align:middle}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:8px 2px}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+  .sat{color:#7c3aed;font-weight:700} .sun{color:#dc2626;font-weight:700}
+  /* modal */
+  .ov{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+  .ov.center{align-items:center}
+  .sheet{background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:18px;max-height:88vh;overflow:auto}
+  .ov.center .sheet{border-radius:18px}
+  .sheet h3{margin:0 0 4px}
+  .pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600}
+  .p-pending{background:#fef9c3;color:#854d0e}
+  .p-approved{background:#dcfce7;color:#166534}
+  .p-rejected{background:#fee2e2;color:#991b1b}
+  .req{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+  .req b{font-size:15px}
+  .arrow{color:var(--brand);font-weight:700}
+  .center-load{text-align:center;color:var(--muted);padding:40px}
+  .tabs{display:flex;gap:8px;margin-bottom:12px}
+  .tabs .btn{flex:1}
+  .tab-off{background:#eef2ff;color:var(--brand-d)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="hdrTitle">📅 ตารางงานร้านยา</h1>
+  <span class="who" id="hdrWho"></span>
+  <button class="btn ghost hidden" id="btnLogout" onclick="logout()">ออก</button>
+</header>
+
+<div class="wrap">
+
+  <!-- ============ LOGIN ============ -->
+  <div id="loginView">
+    <div class="card">
+      <h3 style="margin-top:0">เข้าสู่ระบบ</h3>
+      <p class="muted" style="margin-top:4px">เลือกสาขาและชื่อของคุณ แล้วใส่รหัส PIN 4 หลัก</p>
+      <label>สาขา</label>
+      <select id="inBranch" onchange="fillNames()"></select>
+      <label>ชื่อ</label>
+      <select id="inName"></select>
+      <label>รหัส PIN</label>
+      <input id="inPin" type="tel" inputmode="numeric" maxlength="6" placeholder="••••" autocomplete="off">
+      <div style="margin-top:14px"><button class="btn" style="width:100%" onclick="doLogin()">เข้าสู่ระบบ</button></div>
+      <div id="loginMsg"></div>
+      <div style="margin-top:14px;text-align:center">
+        <a href="#" onclick="adminLogin();return false" class="muted" style="text-decoration:underline">เข้าระบบแอดมิน (เจ้าของร้าน)</a>
+      </div>
+    </div>
+    <p class="muted" style="text-align:center" id="bootMsg">กำลังเชื่อมต่อ…</p>
+  </div>
+
+  <!-- ============ STAFF ============ -->
+  <div id="staffView" class="hidden">
+    <div class="card" style="padding:12px 14px">
+      <div class="row" style="align-items:flex-end">
+        <div>
+          <label style="margin-top:0">สาขา</label>
+          <select id="viewBranch" onchange="loadSchedule()"></select>
+        </div>
+        <div style="flex:0 0 auto">
+          <button class="btn sec sm" onclick="loadSchedule()">รีเฟรช</button>
+          <button class="btn sec sm" onclick="showMyReq()">คำขอของฉัน</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span>★ = คอลัมน์ของฉัน</span>
+        <span><i style="background:#ff2b2b"></i>หยุด</span>
+        <span><i style="background:#ff33cc"></i>เภสัชพาร์ท</span>
+        <span><span class="dot"></span>มีคำขอรออนุมัติ</span>
+      </div>
+      <p class="muted" id="staffHint">แตะที่ช่องของคุณ (คอลัมน์ฟ้า) เพื่อขอเปลี่ยนเวลา</p>
+    </div>
+    <div class="scroll"><table id="schedTable"></table></div>
+    <p class="center-load hidden" id="schedLoad">กำลังโหลดตาราง…</p>
+  </div>
+
+  <!-- ============ ADMIN ============ -->
+  <div id="adminView" class="hidden">
+    <div class="tabs">
+      <button class="btn" id="tabPending" onclick="adminTab('pending')">คำขอรออนุมัติ <span id="pendCount"></span></button>
+      <button class="btn tab-off" id="tabSched" onclick="adminTab('sched')">ดู/แก้ตาราง</button>
+    </div>
+
+    <div id="adminPending">
+      <div id="pendingList"></div>
+      <p class="center-load hidden" id="pendLoad">กำลังโหลด…</p>
+    </div>
+
+    <div id="adminSched" class="hidden">
+      <div class="card" style="padding:12px 14px">
+        <label style="margin-top:0">สาขา</label>
+        <select id="adminBranch" onchange="loadSchedule()"></select>
+        <p class="muted" style="margin-bottom:0">แตะช่องไหนก็ได้เพื่อแก้ทันที (แอดมินไม่ต้องรออนุมัติ)</p>
+      </div>
+      <div class="scroll"><table id="schedTable2"></table></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ MODAL: edit shift ============ -->
+<div id="editOverlay" class="ov hidden">
+  <div class="sheet">
+    <h3 id="editTitle">เปลี่ยนเวลา</h3>
+    <p class="muted" id="editSub"></p>
+    <label>เวลาใหม่</label>
+    <select id="editShift" onchange="onShiftSel()"></select>
+    <div id="customWrap" class="hidden">
+      <label>พิมพ์เวลาเอง (เช่น 9.00-18.30)</label>
+      <input id="editCustom" placeholder="เช่น 9.00-18.30 หรือ ลากิจ">
+    </div>
+    <label>หมายเหตุ / เหตุผล <span class="muted">(ถ้ามี)</span></label>
+    <textarea id="editNote" placeholder="เช่น ขอสลับเวรกับเพื่อน, มีธุระตอนเช้า"></textarea>
+    <div id="editMsg"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn sec" onclick="closeEdit()">ยกเลิก</button>
+      <button class="btn" id="editSubmit" onclick="submitEdit()">ส่งคำขอ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: my requests ============ -->
+<div id="myReqOverlay" class="ov center hidden">
+  <div class="sheet">
+    <h3>คำขอของฉัน</h3>
+    <div id="myReqList" style="margin-top:10px"></div>
+    <div style="margin-top:12px;text-align:right"><button class="btn sec" onclick="hide('myReqOverlay')">ปิด</button></div>
+  </div>
+</div>
+
+<script>
+/* ===================================================================
+   ⚙️ ตั้งค่า: วาง URL ของ Apps Script Web App ตรงนี้ (ลงท้ายด้วย /exec)
+   =================================================================== */
+var API_URL = "https://script.google.com/macros/s/AKfycbzSdkwlEPt4jnx8fbltoA0OP0Xc2ziRQM6cYM7PSsV4gobrQvBaRl08sGogkE3MVyZfDA/exec";
+
+/* ------------- JSONP helper ------------- */
+function api(params){
+  return new Promise(function(resolve,reject){
+    if(!API_URL || API_URL.indexOf("PASTE_YOUR")===0){
+      reject("ยังไม่ได้ตั้งค่า API_URL ในไฟล์ index.html"); return;
+    }
+    var cb="cb"+Date.now()+Math.floor(Math.random()*100000);
+    var s=document.createElement("script");
+    var t=setTimeout(function(){cleanup();reject("หมดเวลาเชื่อมต่อ");},20000);
+    function cleanup(){clearTimeout(t);delete window[cb];if(s.parentNode)s.parentNode.removeChild(s);}
+    window[cb]=function(data){cleanup();resolve(data);};
+    var qs=Object.keys(params).map(function(k){return encodeURIComponent(k)+"="+encodeURIComponent(params[k]);}).join("&");
+    s.src=API_URL+"?"+qs+"&callback="+cb;
+    s.onerror=function(){cleanup();reject("เชื่อมต่อไม่สำเร็จ");};
+    document.body.appendChild(s);
+  });
+}
+
+/* ------------- state ------------- */
+var S={ boot:null, user:null, sched:null, editCtx:null, adminTabName:'pending' };
+function $(id){return document.getElementById(id);}
+function show(id){$(id).classList.remove('hidden');}
+function hide(id){$(id).classList.add('hidden');}
+
+/* ------------- boot ------------- */
+window.onload=function(){
+  api({action:'bootstrap'}).then(function(d){
+    if(!d.ok){$('bootMsg').textContent='โหลดข้อมูลไม่ได้: '+(d.error||'');return;}
+    S.boot=d;
+    var bs=$('inBranch'); bs.innerHTML='';
+    d.branches.forEach(function(b){bs.add(new Option(b,b));});
+    fillNames();
+    $('bootMsg').textContent='พร้อมใช้งาน';
+    setTimeout(function(){$('bootMsg').classList.add('hidden');},1500);
+  }).catch(function(e){$('bootMsg').textContent='เชื่อมต่อไม่สำเร็จ: '+e;});
+};
+
+function fillNames(){
+  if(!S.boot)return;
+  var b=$('inBranch').value, ns=$('inName'); ns.innerHTML='';
+  S.boot.employees.filter(function(e){return e.branch===b;})
+    .forEach(function(e){ns.add(new Option(e.name,e.name));});
+}
+
+/* ------------- login ------------- */
+function doLogin(){
+  var name=$('inName').value, pin=$('inPin').value.trim();
+  $('loginMsg').innerHTML='';
+  if(!pin){$('loginMsg').innerHTML='<div class="err">กรุณาใส่ PIN</div>';return;}
+  api({action:'login',name:name,pin:pin}).then(function(d){
+    if(!d.ok){$('loginMsg').innerHTML='<div class="err">'+(d.error||'เข้าระบบไม่สำเร็จ')+'</div>';return;}
+    S.user={name:d.name,role:d.role,branch:d.branch,pin:pin};
+    enterApp();
+  }).catch(function(e){$('loginMsg').innerHTML='<div class="err">'+e+'</div>';});
+}
+function adminLogin(){
+  var pin=prompt('ใส่ PIN แอดมิน (เจ้าของร้าน)');
+  if(!pin)return;
+  api({action:'login',name:'',pin:pin.trim()}).then(function(d){
+    if(!d.ok||d.role!=='admin'){alert(d.error||'PIN แอดมินไม่ถูกต้อง');return;}
+    S.user={name:d.name,role:'admin',pin:pin.trim()};
+    enterApp();
+  }).catch(function(e){alert(e);});
+}
+function logout(){S.user=null;hide('staffView');hide('adminView');hide('btnLogout');show('loginView');
+  $('hdrWho').textContent='';$('inPin').value='';}
+
+function enterApp(){
+  hide('loginView');show('btnLogout');
+  $('hdrWho').textContent=S.user.name+(S.user.role==='admin'?' (แอดมิน)':'');
+  if(S.user.role==='admin'){
+    $('hdrTitle').textContent='🛠 จัดการตาราง';
+    var ab=$('adminBranch');ab.innerHTML='';
+    S.boot.branches.forEach(function(b){ab.add(new Option(b,b));});
+    show('adminView');adminTab('pending');
+  }else{
+    $('hdrTitle').textContent='📅 ตารางงาน';
+    var vb=$('viewBranch');vb.innerHTML='';
+    S.boot.branches.forEach(function(b){vb.add(new Option(b,b));});
+    vb.value=S.user.branch;
+    show('staffView');loadSchedule();
+  }
+}
+
+/* ------------- schedule render ------------- */
+function curBranch(){return S.user.role==='admin'?$('adminBranch').value:$('viewBranch').value;}
+function tableEl(){return S.user.role==='admin'?$('schedTable2'):$('schedTable');}
+
+// สีหัวตารางตามสาขา (ให้เหมือนไฟล์ Google Sheet)
+var headerColor={
+  'สาขา 1':'#92d050',   // เขียว
+  'สาขา 2':'#9dc3e6',   // ฟ้า
+  'สาขา 3':'#f4a98f',   // ส้มแซลมอน
+  'สาขา 4':'#ffd966',   // เหลือง
+  'บางขุนศรี':'#7fd1c1'  // เขียวน้ำทะเล
+};
+
+function loadSchedule(){
+  var loadEl=S.user.role==='admin'?null:$('schedLoad');
+  if(loadEl)show('schedLoad');
+  api({action:'schedule',branch:curBranch()}).then(function(d){
+    if(loadEl)hide('schedLoad');
+    if(!d.ok){alert(d.error||'โหลดตารางไม่ได้');return;}
+    S.sched=d; renderTable();
+  }).catch(function(e){if(loadEl)hide('schedLoad');alert(e);});
+}
+
+function pendingFor(day,emp){
+  if(!S.sched.pending)return null;
+  for(var i=0;i<S.sched.pending.length;i++){
+    var p=S.sched.pending[i];
+    if(p.day===day && p.employee===emp)return p;
+  }
+  return null;
+}
+
+function renderTable(){
+  var d=S.sched, t=tableEl(), me=S.user.name, isAdmin=S.user.role==='admin';
+  var bc=headerColor[d.branch]||'#cbd5e1';
+  var html='<thead><tr><th style="background:'+bc+';color:#1f2937">วัน</th>';
+  d.columns.forEach(function(c){
+    var mine=(!isAdmin && c===me);
+    var ph=(c==='เภสัชพาร์ท');
+    var bg=ph?'#ffffff':bc;
+    html+='<th class="'+(mine?'me-h':'')+'" style="background:'+bg+';color:#1f2937">'+esc(c)+(mine?' ★':'')+'</th>';
+  });
+  html+='</tr></thead><tbody>';
+  d.days.forEach(function(row){
+    var dowCls=row.dow==='ส'?'sat':(row.dow==='อา'?'sun':'');
+    html+='<tr><th><span class="'+dowCls+'">'+row.day+' '+esc(row.dow)+'</span></th>';
+    d.columns.forEach(function(c){
+      var v=row.cells[c]||'';
+      var mine=(!isAdmin && c===me);
+      var ph=(c==='เภสัชพาร์ท');
+      var editable=isAdmin||mine;
+      var pend=pendingFor(row.day,c);
+      var cls='cell';
+      if(v==='หยุด') cls+=' off';
+      else if(ph && v) cls+=' pharm';
+      if(mine) cls+=' minecol';
+      if(editable) cls+=' me';
+      var content=esc(v)+(pend?'<span class="dot" title="รออนุมัติ"></span>':'');
+      html+='<td class="'+cls+'"'+(editable?(' onclick="openEdit('+row.day+',\''+jsq(c)+'\')"'):'')+'>'+content+'</td>';
+    });
+    html+='</tr>';
+  });
+  html+='</tbody>';
+  t.innerHTML=html;
+}
+
+/* ------------- edit modal ------------- */
+function openEdit(day,emp){
+  var row=null;
+  for(var i=0;i<S.sched.days.length;i++)if(S.sched.days[i].day===day){row=S.sched.days[i];break;}
+  var cur=row?(row.cells[emp]||''):'';
+  S.editCtx={day:day,emp:emp,branch:curBranch(),cur:cur};
+  $('editTitle').textContent=(S.user.role==='admin'?'แก้เวลา: ':'ขอเปลี่ยนเวลา: ')+emp;
+  $('editSub').textContent='วันที่ '+day+' '+(row?row.dow:'')+' · เวลาเดิม: '+(cur||'-');
+  var sel=$('editShift'); sel.innerHTML='';
+  sel.add(new Option('— เลือกเวลา —',''));
+  (S.sched.shifts||[]).forEach(function(sh){sel.add(new Option(sh,sh));});
+  sel.add(new Option('อื่นๆ (พิมพ์เอง)','__custom__'));
+  if(cur && (S.sched.shifts||[]).indexOf(cur)>=0)sel.value=cur;
+  $('editCustom').value=''; $('editNote').value=''; $('editMsg').innerHTML='';
+  hide('customWrap'); onShiftSel();
+  $('editSubmit').textContent=S.user.role==='admin'?'บันทึก':'ส่งคำขอ';
+  show('editOverlay');
+}
+function onShiftSel(){ if($('editShift').value==='__custom__')show('customWrap');else hide('customWrap'); }
+function closeEdit(){hide('editOverlay');}
+
+function submitEdit(){
+  var c=S.editCtx, sel=$('editShift').value, note=$('editNote').value.trim();
+  var newShift = sel==='__custom__' ? $('editCustom').value.trim() : sel;
+  $('editMsg').innerHTML='';
+  if(!newShift && !note){$('editMsg').innerHTML='<div class="err">เลือกเวลาใหม่ หรือใส่หมายเหตุอย่างน้อยหนึ่งอย่าง</div>';return;}
+  $('editSubmit').disabled=true;
+  var isAdmin=S.user.role==='admin';
+  api({action:'request',name:S.user.name,pin:S.user.pin,branch:c.branch,day:c.day,
+       employee:c.emp,newShift:newShift,note:note}).then(function(d){
+    if(!d.ok)throw (d.error||'ส่งไม่สำเร็จ');
+    if(isAdmin) return api({action:'decide',pin:S.user.pin,reqId:d.reqId,decision:'approve',note:''});
+    return {ok:true};
+  }).then(function(d2){
+    if(d2 && !d2.ok)throw (d2.error||'บันทึกไม่สำเร็จ');
+    $('editSubmit').disabled=false;
+    $('editMsg').innerHTML='<div class="ok-msg">'+(isAdmin?'บันทึกแล้ว':'ส่งคำขอแล้ว รอแอดมินอนุมัติ')+'</div>';
+    setTimeout(function(){closeEdit();loadSchedule();},700);
+  }).catch(function(e){$('editSubmit').disabled=false;$('editMsg').innerHTML='<div class="err">'+e+'</div>';});
+}
+
+/* ------------- my requests ------------- */
+function showMyReq(){
+  $('myReqList').innerHTML='<p class="muted">กำลังโหลด…</p>'; show('myReqOverlay');
+  api({action:'myrequests',name:S.user.name,pin:S.user.pin}).then(function(d){
+    if(!d.ok){$('myReqList').innerHTML='<div class="err">'+(d.error||'')+'</div>';return;}
+    if(!d.requests.length){$('myReqList').innerHTML='<p class="muted">ยังไม่มีคำขอ</p>';return;}
+    d.requests.reverse();
+    $('myReqList').innerHTML=d.requests.map(reqCard).join('');
+  });
+}
+function reqCard(r){
+  var st=r.status==='approved'?'p-approved':(r.status==='rejected'?'p-rejected':'p-pending');
+  var stTxt=r.status==='approved'?'อนุมัติแล้ว':(r.status==='rejected'?'ไม่อนุมัติ':'รออนุมัติ');
+  return '<div class="req"><span class="pill '+st+'">'+stTxt+'</span> '
+    +'<b> '+esc(r.branch)+' · วันที่ '+r.day+'</b><br>'
+    +'<span class="muted">'+esc(r.employee)+'</span><br>'
+    +esc(r.oldShift||'-')+' <span class="arrow">→</span> '+esc(r.newShift||'(ไม่เปลี่ยนเวลา)')
+    +(r.note?'<br><span class="muted">📝 '+esc(r.note)+'</span>':'')+'</div>';
+}
+
+/* ------------- admin ------------- */
+function adminTab(name){
+  S.adminTabName=name;
+  if(name==='pending'){show('adminPending');hide('adminSched');
+    $('tabPending').classList.remove('tab-off');$('tabSched').classList.add('tab-off');loadPending();}
+  else{hide('adminPending');show('adminSched');
+    $('tabSched').classList.remove('tab-off');$('tabPending').classList.add('tab-off');loadSchedule();}
+}
+function loadPending(){
+  show('pendLoad');$('pendingList').innerHTML='';
+  api({action:'pending',pin:S.user.pin}).then(function(d){
+    hide('pendLoad');
+    if(!d.ok){$('pendingList').innerHTML='<div class="err">'+(d.error||'')+'</div>';return;}
+    $('pendCount').textContent=d.pending.length?('('+d.pending.length+')'):'';
+    if(!d.pending.length){$('pendingList').innerHTML='<div class="card"><p class="muted" style="margin:0">ไม่มีคำขอค้างอยู่ 🎉</p></div>';return;}
+    $('pendingList').innerHTML=d.pending.map(adminReqCard).join('');
+  }).catch(function(e){hide('pendLoad');$('pendingList').innerHTML='<div class="err">'+e+'</div>';});
+}
+function adminReqCard(r){
+  return '<div class="card" style="padding:14px" id="rc_'+r.reqId+'">'
+    +'<b>'+esc(r.branch)+' · วันที่ '+r.day+'</b> <span class="muted">— '+esc(r.employee)+'</span><br>'
+    +'<div style="margin:8px 0;font-size:16px">'+esc(r.oldShift||'-')+' <span class="arrow">→</span> <b>'+esc(r.newShift||'(ไม่เปลี่ยนเวลา)')+'</b></div>'
+    +(r.note?'<div class="muted" style="margin-bottom:10px">📝 '+esc(r.note)+'</div>':'')
+    +'<div class="row"><button class="btn ok sm" onclick="decide(\''+r.reqId+'\',\'approve\')">อนุมัติ</button>'
+    +'<button class="btn bad sm" onclick="decide(\''+r.reqId+'\',\'reject\')">ไม่อนุมัติ</button></div>'
+    +'<div id="msg_'+r.reqId+'"></div></div>';
+}
+function decide(reqId,decision){
+  var note='';
+  if(decision==='reject'){note=prompt('เหตุผลที่ไม่อนุมัติ (ถ้ามี)')||'';}
+  var msg=$('msg_'+reqId); if(msg)msg.innerHTML='<p class="muted" style="margin:8px 0 0">กำลังบันทึก…</p>';
+  api({action:'decide',pin:S.user.pin,reqId:reqId,decision:decision,note:note}).then(function(d){
+    if(!d.ok){if(msg)msg.innerHTML='<div class="err">'+(d.error||'ไม่สำเร็จ')+'</div>';return;}
+    var card=$('rc_'+reqId); if(card)card.style.display='none';
+    loadPending();
+  }).catch(function(e){if(msg)msg.innerHTML='<div class="err">'+e+'</div>';});
+}
+
+/* ------------- utils ------------- */
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
+function jsq(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+</script>
+</body>
+</html>
