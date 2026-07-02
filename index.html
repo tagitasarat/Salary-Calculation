@@ -263,6 +263,7 @@ window.onload=function(){
 function fillNames(){
   if(!S.boot)return;
   var b=$('inBranch').value, ns=$('inName'); ns.innerHTML='';
+  ns.add(new Option('— เลือกชื่อ —',''));
   S.boot.employees.filter(function(e){return e.branch===b;})
     .forEach(function(e){ns.add(new Option(e.name,e.name));});
 }
@@ -271,6 +272,7 @@ function fillNames(){
 function doLogin(){
   var name=$('inName').value, pin=$('inPin').value.trim();
   $('loginMsg').innerHTML='';
+  if(!name){$('loginMsg').innerHTML='<div class="err">กรุณาเลือกชื่อของคุณก่อน</div>';return;}
   if(!pin){$('loginMsg').innerHTML='<div class="err">กรุณาใส่ PIN</div>';return;}
   api({action:'login',name:name,pin:pin}).then(function(d){
     if(!d.ok){$('loginMsg').innerHTML='<div class="err">'+(d.error||'เข้าระบบไม่สำเร็จ')+'</div>';return;}
