@@ -359,15 +359,25 @@ function pendingFor(day,emp){
   return null;
 }
 
+// สีจากชีตจริง: backend ส่ง headerColors / row.colors มา จะใช้สีนั้นก่อนเสมอ
+function isColor(c){return !!c && /^#[0-9a-f]{6}$/i.test(c) && String(c).toLowerCase()!=='#ffffff';}
+function textOn(bg){
+  var h=String(bg).replace('#','');
+  var r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);
+  return (r*299+g*587+b*114)/1000>150?'#1f2937':'#fff';
+}
+
 function renderTable(){
   var d=S.sched, t=tableEl(), me=S.user.name, isAdmin=S.user.role==='admin';
   var bc=headerColor[d.branch]||'#cbd5e1';
-  var html='<thead><tr><th style="background:'+bc+';color:#1f2937">วัน</th>';
+  var hc=d.headerColors||{};
+  var dayHead=isColor(hc['วัน'])?hc['วัน']:bc;
+  var html='<thead><tr><th style="background:'+dayHead+';color:'+textOn(dayHead)+'">วัน</th>';
   d.columns.forEach(function(c){
     var mine=(!isAdmin && c===me);
     var ph=(c==='เภสัชพาร์ท');
-    var bg=ph?'#ffffff':bc;
-    html+='<th class="'+(mine?'me-h':'')+'" style="background:'+bg+';color:#1f2937">'+esc(c)+(mine?' ★':'')+'</th>';
+    var bg=isColor(hc[c])?hc[c]:(ph?'#ffffff':bc);
+    html+='<th class="'+(mine?'me-h':'')+'" style="background:'+bg+';color:'+(bg==='#ffffff'?'#1f2937':textOn(bg))+'">'+esc(c)+(mine?' ★':'')+'</th>';
   });
   html+='</tr></thead><tbody>';
   d.days.forEach(function(row){
@@ -379,13 +389,15 @@ function renderTable(){
       var ph=(c==='เภสัชพาร์ท');
       var editable=isAdmin||mine;
       var pend=pendingFor(row.day,c);
-      var cls='cell';
-      if(v==='หยุด') cls+=' off';
+      var cellBg=(row.colors&&row.colors[c])||'';
+      var cls='cell', styleAttr='';
+      if(isColor(cellBg)){styleAttr=' style="background:'+cellBg+';color:'+textOn(cellBg)+';font-weight:600"';}
+      else if(v==='หยุด') cls+=' off';
       else if(ph && v) cls+=' pharm';
       if(mine) cls+=' minecol';
       if(editable) cls+=' me';
       var content=esc(v)+(pend?'<span class="dot" title="รออนุมัติ"></span>':'');
-      html+='<td class="'+cls+'"'+(editable?(' onclick="openEdit('+row.day+',\''+jsq(c)+'\')"'):'')+'>'+content+'</td>';
+      html+='<td class="'+cls+'"'+styleAttr+(editable?(' onclick="openEdit('+row.day+',\''+jsq(c)+'\')"'):'')+'>'+content+'</td>';
     });
     html+='</tr>';
   });
