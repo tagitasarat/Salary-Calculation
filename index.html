@@ -108,13 +108,17 @@
     <div class="card" style="padding:12px 14px">
       <div class="row" style="align-items:flex-end">
         <div>
+          <label style="margin-top:0">เดือน</label>
+          <select id="viewMonth" onchange="onMonthChange('view')"></select>
+        </div>
+        <div>
           <label style="margin-top:0">สาขา</label>
           <select id="viewBranch" onchange="loadSchedule()"></select>
         </div>
-        <div style="flex:0 0 auto">
-          <button class="btn sec sm" onclick="loadSchedule()">รีเฟรช</button>
-          <button class="btn sec sm" onclick="showMyReq()">คำขอของฉัน</button>
-        </div>
+      </div>
+      <div style="margin-top:8px">
+        <button class="btn sec sm" onclick="loadSchedule()">รีเฟรช</button>
+        <button class="btn sec sm" onclick="showMyReq()">คำขอของฉัน</button>
       </div>
       <div class="legend">
         <span>★ = คอลัมน์ของฉัน</span>
@@ -130,9 +134,14 @@
 
   <!-- ============ ADMIN ============ -->
   <div id="adminView" class="hidden">
+    <div class="card" style="padding:10px 14px">
+      <label style="margin-top:0">เดือนที่กำลังดู</label>
+      <select id="adminMonth" onchange="onMonthChange('admin')"></select>
+    </div>
     <div class="tabs">
-      <button class="btn" id="tabPending" onclick="adminTab('pending')">คำขอรออนุมัติ <span id="pendCount"></span></button>
+      <button class="btn" id="tabPending" onclick="adminTab('pending')">คำขอ <span id="pendCount"></span></button>
       <button class="btn tab-off" id="tabSched" onclick="adminTab('sched')">ดู/แก้ตาราง</button>
+      <button class="btn tab-off" id="tabPins" onclick="adminTab('pins')">จัดการ PIN</button>
     </div>
 
     <div id="adminPending">
@@ -147,6 +156,30 @@
         <p class="muted" style="margin-bottom:0">แตะช่องไหนก็ได้เพื่อแก้ทันที (แอดมินไม่ต้องรออนุมัติ)</p>
       </div>
       <div class="scroll"><table id="schedTable2"></table></div>
+    </div>
+
+    <div id="adminPins" class="hidden">
+      <div class="card" style="padding:12px 14px">
+        <b>📁 จัดการเดือน</b>
+        <p class="muted" style="margin:4px 0 8px">ลูกน้องจะเลือกดูได้ทุกเดือนที่อยู่ในรายการนี้ (ดาว = เดือนเริ่มต้นที่เปิดมาเจอ)</p>
+        <div id="monthsList"></div>
+        <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
+          <label style="margin-top:0">เพิ่มเดือนใหม่</label>
+          <input id="newMonthLabel" placeholder="ชื่อเดือน เช่น กรกฎาคม 2569" style="margin-bottom:6px">
+          <input id="newMonthLink" placeholder="วางลิงก์ไฟล์ Google Sheet เดือนใหม่">
+          <div style="margin-top:8px"><button class="btn sm" onclick="addMonth()">+ เพิ่มเดือน</button></div>
+        </div>
+      </div>
+      <div class="card" style="padding:12px 14px">
+        <b>PIN แอดมิน (เจ้าของร้าน)</b>
+        <div class="row" style="align-items:flex-end;margin-top:6px">
+          <div><input id="adminPinBox" type="tel" inputmode="numeric" maxlength="6"></div>
+          <div style="flex:0 0 auto"><button class="btn sm" onclick="saveAdminPin()">บันทึก</button></div>
+        </div>
+        <p class="muted" style="margin-bottom:0">เปลี่ยน PIN พนักงานด้านล่างได้เลย แตะ "บันทึก" ในแถวนั้น</p>
+      </div>
+      <div id="pinsList"></div>
+      <p class="center-load hidden" id="pinsLoad">กำลังโหลด…</p>
     </div>
   </div>
 
@@ -207,7 +240,7 @@ function api(params){
 }
 
 /* ------------- state ------------- */
-var S={ boot:null, user:null, sched:null, editCtx:null, adminTabName:'pending' };
+var S={ boot:null, user:null, sched:null, editCtx:null, adminTabName:'pending', months:[], month:'' };
 function $(id){return document.getElementById(id);}
 function show(id){$(id).classList.remove('hidden');}
 function hide(id){$(id).classList.add('hidden');}
@@ -217,6 +250,8 @@ window.onload=function(){
   api({action:'bootstrap'}).then(function(d){
     if(!d.ok){$('bootMsg').textContent='โหลดข้อมูลไม่ได้: '+(d.error||'');return;}
     S.boot=d;
+    S.months=d.months||[];
+    S.month=d.defaultFile||(S.months[0]&&S.months[0].id)||'';
     var bs=$('inBranch'); bs.innerHTML='';
     d.branches.forEach(function(b){bs.add(new Option(b,b));});
     fillNames();
@@ -255,6 +290,22 @@ function adminLogin(){
 function logout(){S.user=null;hide('staffView');hide('adminView');hide('btnLogout');show('loginView');
   $('hdrWho').textContent='';$('inPin').value='';}
 
+function fillMonthSel(id){
+  var sel=$(id); if(!sel)return; sel.innerHTML='';
+  if(!S.months.length){sel.add(new Option('(ยังไม่มีเดือน)',''));return;}
+  S.months.forEach(function(m){
+    var star=(m.id===(S.boot.defaultFile))?' ★':'';
+    sel.add(new Option(m.label+star,m.id));
+  });
+  sel.value=S.month;
+}
+function onMonthChange(which){
+  S.month=$(which==='admin'?'adminMonth':'viewMonth').value;
+  var other=$(which==='admin'?'viewMonth':'adminMonth'); if(other)other.value=S.month;
+  if(S.user.role==='admin'){ if(S.adminTabName==='pending')loadPending(); else if(S.adminTabName==='sched')loadSchedule(); else loadPins(); }
+  else loadSchedule();
+}
+
 function enterApp(){
   hide('loginView');show('btnLogout');
   $('hdrWho').textContent=S.user.name+(S.user.role==='admin'?' (แอดมิน)':'');
@@ -262,12 +313,14 @@ function enterApp(){
     $('hdrTitle').textContent='🛠 จัดการตาราง';
     var ab=$('adminBranch');ab.innerHTML='';
     S.boot.branches.forEach(function(b){ab.add(new Option(b,b));});
+    fillMonthSel('adminMonth');
     show('adminView');adminTab('pending');
   }else{
     $('hdrTitle').textContent='📅 ตารางงาน';
     var vb=$('viewBranch');vb.innerHTML='';
     S.boot.branches.forEach(function(b){vb.add(new Option(b,b));});
     vb.value=S.user.branch;
+    fillMonthSel('viewMonth');
     show('staffView');loadSchedule();
   }
 }
@@ -288,7 +341,7 @@ var headerColor={
 function loadSchedule(){
   var loadEl=S.user.role==='admin'?null:$('schedLoad');
   if(loadEl)show('schedLoad');
-  api({action:'schedule',branch:curBranch()}).then(function(d){
+  api({action:'schedule',branch:curBranch(),file:S.month}).then(function(d){
     if(loadEl)hide('schedLoad');
     if(!d.ok){alert(d.error||'โหลดตารางไม่ได้');return;}
     S.sched=d; renderTable();
@@ -367,9 +420,9 @@ function submitEdit(){
   $('editSubmit').disabled=true;
   var isAdmin=S.user.role==='admin';
   api({action:'request',name:S.user.name,pin:S.user.pin,branch:c.branch,day:c.day,
-       employee:c.emp,newShift:newShift,note:note}).then(function(d){
+       employee:c.emp,newShift:newShift,note:note,file:S.month}).then(function(d){
     if(!d.ok)throw (d.error||'ส่งไม่สำเร็จ');
-    if(isAdmin) return api({action:'decide',pin:S.user.pin,reqId:d.reqId,decision:'approve',note:''});
+    if(isAdmin) return api({action:'decide',pin:S.user.pin,reqId:d.reqId,decision:'approve',note:'',file:S.month});
     return {ok:true};
   }).then(function(d2){
     if(d2 && !d2.ok)throw (d2.error||'บันทึกไม่สำเร็จ');
@@ -382,7 +435,7 @@ function submitEdit(){
 /* ------------- my requests ------------- */
 function showMyReq(){
   $('myReqList').innerHTML='<p class="muted">กำลังโหลด…</p>'; show('myReqOverlay');
-  api({action:'myrequests',name:S.user.name,pin:S.user.pin}).then(function(d){
+  api({action:'myrequests',name:S.user.name,pin:S.user.pin,file:S.month}).then(function(d){
     if(!d.ok){$('myReqList').innerHTML='<div class="err">'+(d.error||'')+'</div>';return;}
     if(!d.requests.length){$('myReqList').innerHTML='<p class="muted">ยังไม่มีคำขอ</p>';return;}
     d.requests.reverse();
@@ -402,14 +455,102 @@ function reqCard(r){
 /* ------------- admin ------------- */
 function adminTab(name){
   S.adminTabName=name;
-  if(name==='pending'){show('adminPending');hide('adminSched');
-    $('tabPending').classList.remove('tab-off');$('tabSched').classList.add('tab-off');loadPending();}
-  else{hide('adminPending');show('adminSched');
-    $('tabSched').classList.remove('tab-off');$('tabPending').classList.add('tab-off');loadSchedule();}
+  hide('adminPending');hide('adminSched');hide('adminPins');
+  $('tabPending').classList.add('tab-off');$('tabSched').classList.add('tab-off');$('tabPins').classList.add('tab-off');
+  if(name==='pending'){show('adminPending');$('tabPending').classList.remove('tab-off');loadPending();}
+  else if(name==='sched'){show('adminSched');$('tabSched').classList.remove('tab-off');loadSchedule();}
+  else{show('adminPins');$('tabPins').classList.remove('tab-off');loadPins();}
+}
+
+function renderMonths(){
+  var html='';
+  S.months.forEach(function(m){
+    var isDef=(m.id===S.boot.defaultFile);
+    html+='<div class="row" style="align-items:center;margin-top:8px">'
+      +'<div style="flex:1.4">'+esc(m.label)+(isDef?' <span class="pill p-approved">เริ่มต้น</span>':'')+'</div>'
+      +'<div style="flex:0 0 auto">'
+      +(isDef?'':'<button class="btn sec sm" onclick="setDefaultMonth(\''+jsq(m.id)+'\')">ตั้งเริ่มต้น</button> ')
+      +'<button class="btn sm" style="background:#dc2626" onclick="removeMonth(\''+jsq(m.id)+'\')">ลบ</button>'
+      +'</div></div>';
+  });
+  $('monthsList').innerHTML=html||'<p class="muted">ยังไม่มีเดือน</p>';
+}
+function loadPins(){
+  show('pinsLoad');$('pinsList').innerHTML='';
+  renderMonths();
+  api({action:'pins',pin:S.user.pin,file:S.month}).then(function(d){
+    hide('pinsLoad');
+    if(!d.ok){$('pinsList').innerHTML='<div class="err">'+(d.error||'')+'</div>';return;}
+    $('adminPinBox').value=d.adminPin||'';
+    var by={};
+    d.employees.forEach(function(e){(by[e.branch]=by[e.branch]||[]).push(e);});
+    var html='';
+    Object.keys(by).forEach(function(b){
+      html+='<div class="card" style="padding:12px 14px"><b>'+esc(b)+'</b>';
+      by[b].forEach(function(e){
+        var id='pin_'+jsq(e.name);
+        html+='<div class="row" style="align-items:center;margin-top:8px">'
+          +'<div style="flex:1.2">'+esc(e.name)+'</div>'
+          +'<div><input id="'+id+'" type="tel" inputmode="numeric" maxlength="6" value="'+esc(e.pin)+'"></div>'
+          +'<div style="flex:0 0 auto"><button class="btn sm" onclick="savePin(\''+jsq(e.name)+'\')">บันทึก</button></div>'
+          +'</div>';
+      });
+      html+='</div>';
+    });
+    $('pinsList').innerHTML=html;
+  }).catch(function(e){hide('pinsLoad');$('pinsList').innerHTML='<div class="err">'+e+'</div>';});
+}
+function savePin(name){
+  var el=document.getElementById('pin_'+name);
+  var v=(el.value||'').trim();
+  if(!/^[0-9]{4,6}$/.test(v)){alert('PIN ต้องเป็นตัวเลข 4–6 หลัก');return;}
+  el.disabled=true;
+  api({action:'setpin',pin:S.user.pin,target:name,newpin:v,file:S.month}).then(function(d){
+    el.disabled=false;
+    if(!d.ok){alert(d.error||'บันทึกไม่สำเร็จ');return;}
+    el.style.background='#dcfce7';setTimeout(function(){el.style.background='';},1200);
+  }).catch(function(e){el.disabled=false;alert(e);});
+}
+function refreshMonths(months){
+  S.months=months||S.months;
+  fillMonthSel('viewMonth'); fillMonthSel('adminMonth'); renderMonths();
+}
+function addMonth(){
+  var label=($('newMonthLabel').value||'').trim();
+  var link=($('newMonthLink').value||'').trim();
+  if(!link){alert('วางลิงก์ไฟล์เดือนใหม่ก่อน');return;}
+  api({action:'addmonth',pin:S.user.pin,label:label,fileId:link,file:S.month}).then(function(d){
+    if(!d.ok){alert(d.error||'เพิ่มไม่สำเร็จ');return;}
+    $('newMonthLabel').value='';$('newMonthLink').value='';
+    refreshMonths(d.months); alert('เพิ่มเดือนแล้ว');
+  }).catch(function(e){alert(e);});
+}
+function removeMonth(id){
+  if(!confirm('ลบเดือนนี้ออกจากรายการ? (ไฟล์ใน Google Sheet ยังอยู่ ไม่ได้ถูกลบ)')) return;
+  api({action:'removemonth',pin:S.user.pin,fileId:id,file:S.month}).then(function(d){
+    if(!d.ok){alert(d.error||'ลบไม่สำเร็จ');return;}
+    refreshMonths(d.months);
+  }).catch(function(e){alert(e);});
+}
+function setDefaultMonth(id){
+  api({action:'setactivefile',pin:S.user.pin,fileId:id,file:S.month}).then(function(d){
+    if(!d.ok){alert(d.error||'ตั้งไม่สำเร็จ');return;}
+    S.boot.defaultFile=d.activeFileId; renderMonths(); fillMonthSel('viewMonth'); fillMonthSel('adminMonth');
+    alert('ตั้งเป็นเดือนเริ่มต้นแล้ว');
+  }).catch(function(e){alert(e);});
+}
+function saveAdminPin(){
+  var v=($('adminPinBox').value||'').trim();
+  if(!/^[0-9]{4,6}$/.test(v)){alert('PIN ต้องเป็นตัวเลข 4–6 หลัก');return;}
+  api({action:'setadminpin',pin:S.user.pin,newpin:v,file:S.month}).then(function(d){
+    if(!d.ok){alert(d.error||'บันทึกไม่สำเร็จ');return;}
+    S.user.pin=v;  // อัปเดต PIN ที่ใช้อยู่ในเซสชันนี้
+    alert('เปลี่ยน PIN แอดมินแล้ว');
+  }).catch(function(e){alert(e);});
 }
 function loadPending(){
   show('pendLoad');$('pendingList').innerHTML='';
-  api({action:'pending',pin:S.user.pin}).then(function(d){
+  api({action:'pending',pin:S.user.pin,file:S.month}).then(function(d){
     hide('pendLoad');
     if(!d.ok){$('pendingList').innerHTML='<div class="err">'+(d.error||'')+'</div>';return;}
     $('pendCount').textContent=d.pending.length?('('+d.pending.length+')'):'';
@@ -430,7 +571,7 @@ function decide(reqId,decision){
   var note='';
   if(decision==='reject'){note=prompt('เหตุผลที่ไม่อนุมัติ (ถ้ามี)')||'';}
   var msg=$('msg_'+reqId); if(msg)msg.innerHTML='<p class="muted" style="margin:8px 0 0">กำลังบันทึก…</p>';
-  api({action:'decide',pin:S.user.pin,reqId:reqId,decision:decision,note:note}).then(function(d){
+  api({action:'decide',pin:S.user.pin,reqId:reqId,decision:decision,note:note,file:S.month}).then(function(d){
     if(!d.ok){if(msg)msg.innerHTML='<div class="err">'+(d.error||'ไม่สำเร็จ')+'</div>';return;}
     var card=$('rc_'+reqId); if(card)card.style.display='none';
     loadPending();
