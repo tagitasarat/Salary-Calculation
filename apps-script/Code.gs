@@ -95,19 +95,26 @@ function branchNameToSheet(name) {
   return 'ตาราง_' + name;   // 'สาขา 1' -> 'ตาราง_สาขา 1' ; 'บางขุนศรี' -> 'ตาราง_บางขุนศรี'
 }
 
-/* ---------- อ่าน Config ---------- */
+/* ---------- อ่าน Config (cache 120 วิ, ล้างเมื่อเปลี่ยน PIN แอดมิน) ---------- */
 function getConfig_() {
+  var key = 'cfg:' + curId_();
+  var hit = cacheGet_(key);
+  if (hit) return hit;
   var sh = ss_().getSheetByName(CONFIG_SHEET);
   var vals = sh.getDataRange().getValues();
   var o = {};
   for (var i = 1; i < vals.length; i++) {
     if (vals[i][0]) o[String(vals[i][0]).trim()] = String(vals[i][1]).trim();
   }
+  cachePut_(key, o, 120);
   return o;
 }
 
-/* ---------- อ่านพนักงานทั้งหมด ---------- */
+/* ---------- อ่านพนักงานทั้งหมด (cache 120 วิ, ล้างเมื่อเปลี่ยน PIN) ---------- */
 function getEmployees_() {
+  var key = 'emps:' + curId_();
+  var hit = cacheGet_(key);
+  if (hit) return hit;
   var sh = ss_().getSheetByName(SETTINGS_SHEET);
   var rng = sh.getRange(EMP_FIRST_ROW, 1, EMP_LAST_ROW - EMP_FIRST_ROW + 1, 11).getValues();
   var list = [];
@@ -121,7 +128,27 @@ function getEmployees_() {
       pin: String(rng[i][10]).trim()
     });
   }
+  cachePut_(key, list, 120);
   return list;
+}
+
+/* ---------- หาตำแหน่งช่องของพนักงานในตารางสาขา (อ่านเบาๆ ไม่เอาสี) ---------- */
+function findCell_(branch, day, employee) {
+  var sheet = ss_().getSheetByName(branchNameToSheet(branch));
+  if (!sheet) return null;
+  var data = sheet.getDataRange().getValues();
+  var header = data[SCHED_HEADER_ROW - 1];
+  var colIdx = -1;
+  for (var c = 2; c < header.length; c++) {
+    if (String(header[c]).trim() === employee) { colIdx = c; break; }
+  }
+  if (colIdx < 0) return null;
+  for (var r = SCHED_FIRST_ROW - 1; r < data.length; r++) {
+    if (Number(data[r][0]) === day) {
+      return { sheet: sheet, row: r + 1, col: colIdx + 1, val: String(data[r][colIdx] == null ? '' : data[r][colIdx]) };
+    }
+  }
+  return null;
 }
 
 /* ---------- รายการ shift ---------- */
@@ -299,20 +326,37 @@ function actRequest_(p) {
   if (!admin && employee !== name) return { ok: false, error: 'แก้ได้เฉพาะตารางของตัวเอง' };
   if (!newShift && !note) return { ok: false, error: 'กรุณาเลือกเวลาใหม่ หรือใส่หมายเหตุ' };
 
-  // หา shift เดิม
-  var sched = readSchedule_(branch);
-  var oldShift = '';
-  if (sched) {
-    for (var i = 0; i < sched.days.length; i++) {
-      if (sched.days[i].day === day) { oldShift = sched.days[i].cells[employee] || ''; break; }
-    }
-  }
+  // หา shift เดิม (อ่านเฉพาะค่า ไม่ต้องอ่านสีทั้งชีต)
+  var cell = findCell_(branch, day, employee);
+  var oldShift = cell ? cell.val : '';
 
   var sh = ss_().getSheetByName(REQ_SHEET);
   var reqId = 'R' + new Date().getTime();
   sh.appendRow([reqId, new Date(), branch, day, employee, oldShift, newShift, note, 'pending', '', '']);
   cacheDrop_('sched:' + curId_() + ':' + branch);   // มีคำขอใหม่ → ล้าง cache ตารางสาขานี้
   return { ok: true, reqId: reqId };
+}
+
+/* ---------- แอดมินแก้ตารางจบในคำสั่งเดียว (เขียนเซลล์ + บันทึกประวัติเป็น approved) ---------- */
+function actAdminSet_(p) {
+  if (!isAdmin_((p.pin || '').trim())) return { ok: false, error: 'ต้องใช้ PIN แอดมิน' };
+  var branch = branchIdToName(p.branch || '');
+  var day = Number(p.day);
+  var employee = (p.employee || '').trim();
+  var newShift = (p.newShift || '').trim();
+  var note = (p.note || '').trim();
+  if (!newShift && !note) return { ok: false, error: 'กรุณาเลือกเวลาใหม่ หรือใส่หมายเหตุ' };
+  var cell = findCell_(branch, day, employee);
+  if (!cell) return { ok: false, error: 'ไม่พบช่องของ ' + employee + ' วันที่ ' + day };
+  var oldShift = cell.val;
+  if (newShift) cell.sheet.getRange(cell.row, cell.col).setValue(newShift);
+  var cfg = getConfig_();
+  ss_().getSheetByName(REQ_SHEET).appendRow([
+    'R' + new Date().getTime(), new Date(), branch, day, employee,
+    oldShift, newShift, note, 'approved', new Date(), cfg.AdminName || 'admin'
+  ]);
+  cacheDrop_('sched:' + curId_() + ':' + branch);
+  return { ok: true };
 }
 
 function actPending_(p) {
@@ -448,6 +492,7 @@ function actSetPin_(p) {
   for (var r = EMP_FIRST_ROW; r <= EMP_LAST_ROW; r++) {
     if (String(sh.getRange(r, 1).getValue()).trim() === target) {
       sh.getRange(r, 11).setValue(newpin);  // คอลัมน์ K
+      cacheDrop_('emps:' + curId_());       // ให้ PIN ใหม่ใช้ได้ทันที
       return { ok: true };
     }
   }
@@ -461,7 +506,7 @@ function actSetAdminPin_(p) {
   var sh = ss_().getSheetByName(CONFIG_SHEET);
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
-    if (String(data[i][0]).trim() === 'AdminPIN') { sh.getRange(i + 1, 2).setValue(newpin); return { ok: true }; }
+    if (String(data[i][0]).trim() === 'AdminPIN') { sh.getRange(i + 1, 2).setValue(newpin); cacheDrop_('cfg:' + curId_()); return { ok: true }; }
   }
   return { ok: false, error: 'ไม่พบ AdminPIN ใน Config' };
 }
@@ -476,6 +521,7 @@ function route_(p) {
     case 'request':     return actRequest_(p);
     case 'pending':     return actPending_(p);
     case 'decide':      return actDecide_(p);
+    case 'adminset':    return actAdminSet_(p);
     case 'myrequests':  return actMyRequests_(p);
     case 'pins':        return actPins_(p);
     case 'setpin':      return actSetPin_(p);

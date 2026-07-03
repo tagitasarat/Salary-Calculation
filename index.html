@@ -361,13 +361,20 @@ var headerColor={
 };
 
 function loadSchedule(force){
-  var loadEl=S.user.role==='admin'?null:$('schedLoad');
+  var wantB=curBranch(), wantM=S.month;
+  var key='pharm_sched:'+wantM+':'+wantB;
+  var cached=null;
+  try{cached=JSON.parse(localStorage.getItem(key)||'null');}catch(e){}
+  if(cached&&cached.ok){S.sched=cached;renderTable();}   // โชว์ตารางเดิมทันที แล้วอัปเดตเบื้องหลัง
+  var loadEl=((cached&&cached.ok)||S.user.role==='admin')?null:$('schedLoad');
   if(loadEl)show('schedLoad');
-  api({action:'schedule',branch:curBranch(),file:S.month,refresh:force?1:''}).then(function(d){
+  api({action:'schedule',branch:wantB,file:wantM,refresh:force?1:''}).then(function(d){
     if(loadEl)hide('schedLoad');
-    if(!d.ok){alert(d.error||'โหลดตารางไม่ได้');return;}
+    if(wantB!==curBranch()||wantM!==S.month)return;   // ผู้ใช้สลับสาขา/เดือนไปแล้ว ไม่ต้องวาดทับ
+    if(!d.ok){if(!cached)alert(d.error||'โหลดตารางไม่ได้');return;}
+    try{localStorage.setItem(key,JSON.stringify(d));}catch(e){}
     S.sched=d; renderTable();
-  }).catch(function(e){if(loadEl)hide('schedLoad');alert(e);});
+  }).catch(function(e){if(loadEl)hide('schedLoad');if(!cached)alert(e);});
 }
 
 function pendingFor(day,emp){
@@ -453,17 +460,33 @@ function submitEdit(){
   if(!newShift && !note){$('editMsg').innerHTML='<div class="err">เลือกเวลาใหม่ หรือใส่หมายเหตุอย่างน้อยหนึ่งอย่าง</div>';return;}
   $('editSubmit').disabled=true;
   var isAdmin=S.user.role==='admin';
-  api({action:'request',name:S.user.name,pin:S.user.pin,branch:c.branch,day:c.day,
-       employee:c.emp,newShift:newShift,note:note,file:S.month}).then(function(d){
-    if(!d.ok)throw (d.error||'ส่งไม่สำเร็จ');
-    if(isAdmin) return api({action:'decide',pin:S.user.pin,reqId:d.reqId,decision:'approve',note:'',file:S.month});
-    return {ok:true};
-  }).then(function(d2){
-    if(d2 && !d2.ok)throw (d2.error||'บันทึกไม่สำเร็จ');
+  function done(){
     $('editSubmit').disabled=false;
     $('editMsg').innerHTML='<div class="ok-msg">'+(isAdmin?'บันทึกแล้ว':'ส่งคำขอแล้ว รอแอดมินอนุมัติ')+'</div>';
-    setTimeout(function(){closeEdit();loadSchedule();},700);
-  }).catch(function(e){$('editSubmit').disabled=false;$('editMsg').innerHTML='<div class="err">'+e+'</div>';});
+    setTimeout(function(){closeEdit();loadSchedule(true);},700);
+  }
+  function fail(e){$('editSubmit').disabled=false;$('editMsg').innerHTML='<div class="err">'+e+'</div>';}
+  function viaRequest(){
+    return api({action:'request',name:S.user.name,pin:S.user.pin,branch:c.branch,day:c.day,
+         employee:c.emp,newShift:newShift,note:note,file:S.month}).then(function(d){
+      if(!d.ok)throw (d.error||'ส่งไม่สำเร็จ');
+      if(isAdmin) return api({action:'decide',pin:S.user.pin,reqId:d.reqId,decision:'approve',note:'',file:S.month})
+        .then(function(d2){if(!d2.ok)throw (d2.error||'บันทึกไม่สำเร็จ');});
+    });
+  }
+  if(isAdmin){
+    // แอดมิน: บันทึกจบในคำสั่งเดียว (ถ้าหลังบ้านยังเวอร์ชันเก่า จะถอยไปใช้วิธีเดิมให้เอง)
+    api({action:'adminset',pin:S.user.pin,branch:c.branch,day:c.day,employee:c.emp,
+         newShift:newShift,note:note,file:S.month}).then(function(d){
+      if(!d.ok){
+        if(String(d.error||'').indexOf('ไม่รู้จัก action')>=0) return viaRequest().then(done,fail);
+        throw (d.error||'บันทึกไม่สำเร็จ');
+      }
+      done();
+    }).catch(fail);
+  }else{
+    viaRequest().then(done,fail);
+  }
 }
 
 /* ------------- my requests ------------- */
