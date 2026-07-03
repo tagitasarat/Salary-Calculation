@@ -34,6 +34,15 @@ function extractId_(s) {
   return m ? m[1] : s;
 }
 
+/* ---------- cache: เก็บผลลัพธ์ไว้สั้นๆ ให้เว็บโหลดเร็วขึ้น ----------
+   - ตาราง (schedule) เก็บ 120 วิ และถูกล้างทันทีเมื่อมีคำขอ/อนุมัติ
+   - bootstrap เก็บ 300 วิ และถูกล้างเมื่อแก้เดือน
+   - ปุ่ม "รีเฟรช" ในเว็บส่ง refresh=1 มา = ข้าม cache อ่านสดเสมอ  */
+function curId_() { return _CUR_FILE || activeId_(); }
+function cacheGet_(k) { try { var v = CacheService.getScriptCache().get(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+function cachePut_(k, obj, sec) { try { CacheService.getScriptCache().put(k, JSON.stringify(obj), sec); } catch (e) {} }
+function cacheDrop_(k) { try { CacheService.getScriptCache().remove(k); } catch (e) {} }
+
 /* ---------- ทะเบียนเดือน (เก็บใน Script Properties = ใช้ร่วมทุกเดือน) ---------- */
 function getMonths_() {
   var raw = PropertiesService.getScriptProperties().getProperty('MONTHS');
@@ -202,11 +211,14 @@ function readRequests_(filterBranch, onlyPending) {
 /* ============================ ACTIONS ============================ */
 
 function actBootstrap_() {
+  var key = 'boot:' + curId_();
+  var hit = cacheGet_(key);
+  if (hit) return hit;
   var emps = getEmployees_();
   var branchSet = {};
   emps.forEach(function (e) { branchSet[e.branch] = true; });
   var branches = ['สาขา 1', 'สาขา 2', 'สาขา 3', 'สาขา 4', 'บางขุนศรี'].filter(function (b) { return branchSet[b]; });
-  return {
+  var res = {
     ok: true,
     branches: branches,
     employees: emps.map(function (e) { return { name: e.name, branch: e.branch }; }),
@@ -215,6 +227,8 @@ function actBootstrap_() {
     months: getMonths_(),
     defaultFile: activeId_()
   };
+  cachePut_(key, res, 300);
+  return res;
 }
 
 function actLogin_(p) {
@@ -247,9 +261,14 @@ function isAdmin_(pin) {
 
 function actSchedule_(p) {
   var branch = branchIdToName(p.branch || '');
+  var key = 'sched:' + curId_() + ':' + branch;
+  if (String(p.refresh || '') !== '1') {          // ปุ่มรีเฟรชส่ง refresh=1 = ข้าม cache
+    var hit = cacheGet_(key);
+    if (hit) return hit;
+  }
   var sched = readSchedule_(branch);
   if (!sched) return { ok: false, error: 'ไม่พบสาขา ' + branch };
-  return {
+  var res = {
     ok: true,
     branch: branch,
     columns: sched.columns,
@@ -259,6 +278,8 @@ function actSchedule_(p) {
     shiftOT: getShiftMap_(),
     pending: readRequests_(branch, true)
   };
+  cachePut_(key, res, 120);
+  return res;
 }
 
 function actRequest_(p) {
@@ -290,6 +311,7 @@ function actRequest_(p) {
   var sh = ss_().getSheetByName(REQ_SHEET);
   var reqId = 'R' + new Date().getTime();
   sh.appendRow([reqId, new Date(), branch, day, employee, oldShift, newShift, note, 'pending', '', '']);
+  cacheDrop_('sched:' + curId_() + ':' + branch);   // มีคำขอใหม่ → ล้าง cache ตารางสาขานี้
   return { ok: true, reqId: reqId };
 }
 
@@ -333,10 +355,12 @@ function actDecide_(p) {
     }
     sh.getRange(rec.rowNum, 9, 1, 3).setValues([['approved', new Date(), cfg.AdminName || 'admin']]);
     if (decNote) sh.getRange(rec.rowNum, 8).setValue((rec.note ? rec.note + ' | ' : '') + 'แอดมิน: ' + decNote);
+    cacheDrop_('sched:' + curId_() + ':' + rec.branch);   // ตารางเปลี่ยน → ล้าง cache
     return { ok: true };
   } else if (action === 'reject') {
     sh.getRange(rec.rowNum, 9, 1, 3).setValues([['rejected', new Date(), cfg.AdminName || 'admin']]);
     if (decNote) sh.getRange(rec.rowNum, 8).setValue((rec.note ? rec.note + ' | ' : '') + 'แอดมิน: ' + decNote);
+    cacheDrop_('sched:' + curId_() + ':' + rec.branch);   // จุดรอนุมัติหาย → ล้าง cache
     return { ok: true };
   }
   return { ok: false, error: 'action ไม่ถูกต้อง' };
@@ -376,7 +400,9 @@ function actSetActiveFile_(p) {
   } catch (e) {
     return { ok: false, error: 'เปิดไฟล์ไม่ได้ — ตรวจ ID หรือสิทธิ์การเข้าถึง' };
   }
+  var oldId = activeId_();
   PropertiesService.getScriptProperties().setProperty('ACTIVE_SHEET_ID', id);
+  cacheDrop_('boot:' + oldId); cacheDrop_('boot:' + id);
   return { ok: true, activeFileId: id, activeFileName: name };
 }
 
@@ -397,10 +423,11 @@ function actAddMonth_(p) {
   var label = (p.label || '').trim() || name;
   var months = getMonths_();
   for (var i = 0; i < months.length; i++) {
-    if (months[i].id === id) { months[i].label = label; saveMonths_(months); return { ok: true, months: months }; }
+    if (months[i].id === id) { months[i].label = label; saveMonths_(months); cacheDrop_('boot:' + activeId_()); return { ok: true, months: months }; }
   }
   months.push({ id: id, label: label });
   saveMonths_(months);
+  cacheDrop_('boot:' + activeId_());
   return { ok: true, months: months };
 }
 function actRemoveMonth_(p) {
@@ -408,6 +435,7 @@ function actRemoveMonth_(p) {
   var id = (p.fileId || '').trim();
   var months = getMonths_().filter(function (m) { return m.id !== id; });
   saveMonths_(months);
+  cacheDrop_('boot:' + activeId_());
   return { ok: true, months: months };
 }
 

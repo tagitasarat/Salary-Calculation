@@ -117,7 +117,7 @@
         </div>
       </div>
       <div style="margin-top:8px">
-        <button class="btn sec sm" onclick="loadSchedule()">รีเฟรช</button>
+        <button class="btn sec sm" onclick="loadSchedule(true)">รีเฟรช</button>
         <button class="btn sec sm" onclick="showMyReq()">คำขอของฉัน</button>
       </div>
       <div class="legend">
@@ -246,18 +246,36 @@ function show(id){$(id).classList.remove('hidden');}
 function hide(id){$(id).classList.add('hidden');}
 
 /* ------------- boot ------------- */
+function applyBoot_(d){
+  S.boot=d; S.months=d.months||[];
+  var valid=false;
+  for(var i=0;i<S.months.length;i++)if(S.months[i].id===S.month)valid=true;
+  if(!S.month||!valid)S.month=d.defaultFile||(S.months[0]&&S.months[0].id)||'';
+  var bs=$('inBranch'), cur=bs.value; bs.innerHTML='';
+  d.branches.forEach(function(b){bs.add(new Option(b,b));});
+  if(cur)bs.value=cur;
+  fillNames();
+  if(S.user){fillMonthSel('viewMonth');fillMonthSel('adminMonth');}
+}
 window.onload=function(){
+  // เปิดเร็ว: ใช้ข้อมูลที่จำไว้ในเครื่องก่อน แล้วค่อยอัปเดตจากเซิร์ฟเวอร์เบื้องหลัง
+  var boot=null,user=null;
+  try{boot=JSON.parse(localStorage.getItem('pharm_boot')||'null');
+      user=JSON.parse(localStorage.getItem('pharm_user')||'null');}catch(e){}
+  if(boot&&boot.ok){
+    applyBoot_(boot);
+    if(user&&user.name&&user.pin){S.user=user;enterApp();}
+    $('bootMsg').classList.add('hidden');
+  }
   api({action:'bootstrap'}).then(function(d){
-    if(!d.ok){$('bootMsg').textContent='โหลดข้อมูลไม่ได้: '+(d.error||'');return;}
-    S.boot=d;
-    S.months=d.months||[];
-    S.month=d.defaultFile||(S.months[0]&&S.months[0].id)||'';
-    var bs=$('inBranch'); bs.innerHTML='';
-    d.branches.forEach(function(b){bs.add(new Option(b,b));});
-    fillNames();
+    if(!d.ok){if(!S.boot)$('bootMsg').textContent='โหลดข้อมูลไม่ได้: '+(d.error||'');return;}
+    try{localStorage.setItem('pharm_boot',JSON.stringify(d));}catch(e){}
+    var firstBoot=!boot;
+    applyBoot_(d);
+    if(firstBoot&&user&&user.name&&user.pin&&!S.user){S.user=user;enterApp();}
     $('bootMsg').textContent='พร้อมใช้งาน';
     setTimeout(function(){$('bootMsg').classList.add('hidden');},1500);
-  }).catch(function(e){$('bootMsg').textContent='เชื่อมต่อไม่สำเร็จ: '+e;});
+  }).catch(function(e){if(!S.boot)$('bootMsg').textContent='เชื่อมต่อไม่สำเร็จ: '+e;});
 };
 
 function fillNames(){
@@ -277,7 +295,7 @@ function doLogin(){
   api({action:'login',name:name,pin:pin}).then(function(d){
     if(!d.ok){$('loginMsg').innerHTML='<div class="err">'+(d.error||'เข้าระบบไม่สำเร็จ')+'</div>';return;}
     S.user={name:d.name,role:d.role,branch:d.branch,pin:pin};
-    enterApp();
+    saveUser_(); enterApp();
   }).catch(function(e){$('loginMsg').innerHTML='<div class="err">'+e+'</div>';});
 }
 function adminLogin(){
@@ -286,10 +304,12 @@ function adminLogin(){
   api({action:'login',name:'',pin:pin.trim()}).then(function(d){
     if(!d.ok||d.role!=='admin'){alert(d.error||'PIN แอดมินไม่ถูกต้อง');return;}
     S.user={name:d.name,role:'admin',pin:pin.trim()};
-    enterApp();
+    saveUser_(); enterApp();
   }).catch(function(e){alert(e);});
 }
-function logout(){S.user=null;hide('staffView');hide('adminView');hide('btnLogout');show('loginView');
+function saveUser_(){try{localStorage.setItem('pharm_user',JSON.stringify(S.user));}catch(e){}}
+function logout(){S.user=null;try{localStorage.removeItem('pharm_user');}catch(e){}
+  hide('staffView');hide('adminView');hide('btnLogout');show('loginView');
   $('hdrWho').textContent='';$('inPin').value='';}
 
 function fillMonthSel(id){
@@ -340,10 +360,10 @@ var headerColor={
   'บางขุนศรี':'#6aa84f'  // เขียวเข้ม
 };
 
-function loadSchedule(){
+function loadSchedule(force){
   var loadEl=S.user.role==='admin'?null:$('schedLoad');
   if(loadEl)show('schedLoad');
-  api({action:'schedule',branch:curBranch(),file:S.month}).then(function(d){
+  api({action:'schedule',branch:curBranch(),file:S.month,refresh:force?1:''}).then(function(d){
     if(loadEl)hide('schedLoad');
     if(!d.ok){alert(d.error||'โหลดตารางไม่ได้');return;}
     S.sched=d; renderTable();
@@ -472,7 +492,7 @@ function adminTab(name){
   hide('adminPending');hide('adminSched');hide('adminPins');
   $('tabPending').classList.add('tab-off');$('tabSched').classList.add('tab-off');$('tabPins').classList.add('tab-off');
   if(name==='pending'){show('adminPending');$('tabPending').classList.remove('tab-off');loadPending();}
-  else if(name==='sched'){show('adminSched');$('tabSched').classList.remove('tab-off');loadSchedule();}
+  else if(name==='sched'){show('adminSched');$('tabSched').classList.remove('tab-off');loadSchedule(true);}
   else{show('adminPins');$('tabPins').classList.remove('tab-off');loadPins();}
 }
 
