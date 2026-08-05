@@ -164,10 +164,19 @@
         <p class="muted" style="margin:4px 0 8px">ลูกน้องจะเลือกดูได้ทุกเดือนที่อยู่ในรายการนี้ (ดาว = เดือนเริ่มต้นที่เปิดมาเจอ)</p>
         <div id="monthsList"></div>
         <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
-          <label style="margin-top:0">เพิ่มเดือนใหม่</label>
+          <b>✨ สร้างเดือนใหม่จากตารางรวม</b>
+          <p class="muted" style="margin:4px 0 8px">เปิดไฟล์ตารางรวม → กดแท็บเดือนที่ต้องการ → ก็อป URL ทั้งเส้นมาวางที่นี่<br>
+            ระบบจะสร้างไฟล์คำนวณเงินเดือนเดือนนั้นให้เอง และผูกไว้ให้แก้พร้อมกันทั้งสองไฟล์</p>
+          <input id="rawLabel" placeholder="ชื่อเดือน (เว้นว่างได้ ระบบตั้งให้เอง)" style="margin-bottom:6px">
+          <input id="rawLink" placeholder="วางลิงก์แท็บเดือนในตารางรวม (…/edit?gid=…)">
+          <div style="margin-top:8px"><button class="btn sm" id="btnImportRaw" onclick="importRaw()">✨ สร้างไฟล์เดือนใหม่</button></div>
+          <div id="rawMsg"></div>
+        </div>
+        <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">
+          <label style="margin-top:0">เพิ่มเดือนจากไฟล์ที่มีอยู่แล้ว</label>
           <input id="newMonthLabel" placeholder="ชื่อเดือน เช่น กรกฎาคม 2569" style="margin-bottom:6px">
-          <input id="newMonthLink" placeholder="วางลิงก์ไฟล์ Google Sheet เดือนใหม่">
-          <div style="margin-top:8px"><button class="btn sm" onclick="addMonth()">+ เพิ่มเดือน</button></div>
+          <input id="newMonthLink" placeholder="วางลิงก์ไฟล์คำนวณเงินเดือนที่สร้างไว้แล้ว">
+          <div style="margin-top:8px"><button class="btn sec sm" onclick="addMonth()">+ เพิ่มเดือน</button></div>
         </div>
       </div>
       <div class="card" style="padding:12px 14px">
@@ -222,14 +231,14 @@
 var API_URL = "https://script.google.com/macros/s/AKfycbzSdkwlEPt4jnx8fbltoA0OP0Xc2ziRQM6cYM7PSsV4gobrQvBaRl08sGogkE3MVyZfDA/exec";
 
 /* ------------- JSONP helper ------------- */
-function api(params){
+function api(params,timeoutMs){
   return new Promise(function(resolve,reject){
     if(!API_URL || API_URL.indexOf("PASTE_YOUR")===0){
       reject("ยังไม่ได้ตั้งค่า API_URL ในไฟล์ index.html"); return;
     }
     var cb="cb"+Date.now()+Math.floor(Math.random()*100000);
     var s=document.createElement("script");
-    var t=setTimeout(function(){cleanup();reject("หมดเวลาเชื่อมต่อ");},20000);
+    var t=setTimeout(function(){cleanup();reject("หมดเวลาเชื่อมต่อ");},timeoutMs||20000);
     function cleanup(){clearTimeout(t);delete window[cb];if(s.parentNode)s.parentNode.removeChild(s);}
     window[cb]=function(data){cleanup();resolve(data);};
     var qs=Object.keys(params).map(function(k){return encodeURIComponent(k)+"="+encodeURIComponent(params[k]);}).join("&");
@@ -581,6 +590,30 @@ function addMonth(){
     $('newMonthLabel').value='';$('newMonthLink').value='';
     refreshMonths(d.months); alert('เพิ่มเดือนแล้ว');
   }).catch(function(e){alert(e);});
+}
+function importRaw(){
+  var link=($('rawLink').value||'').trim();
+  var label=($('rawLabel').value||'').trim();
+  var msg=$('rawMsg'), btn=$('btnImportRaw');
+  msg.innerHTML='';
+  if(!link){msg.innerHTML='<div class="err">วางลิงก์แท็บเดือนในตารางรวมก่อน</div>';return;}
+  if(link.indexOf('gid=')<0){msg.innerHTML='<div class="err">ลิงก์ไม่มี gid — ต้องกดที่แท็บเดือนที่ต้องการก่อนแล้วค่อยก็อป URL</div>';return;}
+  btn.disabled=true; btn.textContent='กำลังสร้าง… (อาจใช้เวลาสักครู่)';
+  api({action:'importraw',pin:S.user.pin,link:link,label:label,file:S.month},180000).then(function(d){
+    btn.disabled=false; btn.textContent='✨ สร้างไฟล์เดือนใหม่';
+    if(!d.ok){msg.innerHTML='<div class="err">'+(d.error||'สร้างไม่สำเร็จ')+'</div>';return;}
+    $('rawLink').value='';$('rawLabel').value='';
+    var w=(d.warnings&&d.warnings.length)
+      ? '<br><b>⚠️ ต้องตรวจเพิ่ม:</b><br>• '+d.warnings.map(esc).join('<br>• ') : '';
+    msg.innerHTML='<div class="ok-msg">สร้างไฟล์ <b>'+esc(d.name)+'</b> แล้ว<br>'
+      +'จากแท็บ '+esc(d.sourceTab)+' · '+d.days+' วัน · '+d.branches.length+' สาขา · '+d.employees+' คน<br>'
+      +'ซิงก์ย้อนกลับ: '+esc(d.trigger||'-')+'<br>'
+      +'<a href="'+esc(d.url)+'" target="_blank">เปิดไฟล์ใหม่</a>'+w+'</div>';
+    refreshMonths(d.months);
+  }).catch(function(e){
+    btn.disabled=false; btn.textContent='✨ สร้างไฟล์เดือนใหม่';
+    msg.innerHTML='<div class="err">'+e+'</div>';
+  });
 }
 function removeMonth(id){
   if(!confirm('ลบเดือนนี้ออกจากรายการ? (ไฟล์ใน Google Sheet ยังอยู่ ไม่ได้ถูกลบ)')) return;
